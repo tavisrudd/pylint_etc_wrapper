@@ -45,6 +45,8 @@ And here are two little helpers for quickly silencing a warning message:
     (insert msgid)))
 
 """
+# ' extra apostrophe to fix Emacs python-mode broken string matching
+
 # Copyright (c) 2002-present, Damn Simple Solutions Ltd.
 # All rights reserved.
 #
@@ -95,13 +97,17 @@ class LintRunner(object):
     output_matcher = None
     output_format = flymake_output_format
     env = None
+    _debug = False
 
-    def __init__(self, ignore_codes=(), use_sane_defaults=True,
-                 output_format=None):
+    def __init__(self, ignore_codes=(),
+                 use_sane_defaults=True,
+                 output_format=None,
+                 debug=False):
         self.ignore_codes = set(ignore_codes)
         self.use_sane_defaults = use_sane_defaults
         if output_format:
             self.output_format = output_format
+        self._debug = debug
 
     @property
     def operative_ignore_codes(self):
@@ -135,10 +141,18 @@ class LintRunner(object):
         args = [self.command]
         args.extend(self.run_flags)
         args.extend(filenames)
+        if self._debug:
+            print "DEBUG: command = ", ' '.join(args)
         process = Popen(args, stdout=PIPE, stderr=PIPE, env=self.env)
         for line in process.stdout:
+            if self._debug:
+                print self.command, 'STDOUT:', line
             self.process_line(line)
         for line in process.stderr:
+            if self._debug:
+                print self.command, 'STDERR:', line
+
+            #print 'ERR: ', line
             self.process_line(line)
 
 
@@ -146,8 +160,8 @@ class PylintRunner(LintRunner):
     output_matcher = re.compile(
         r'(?P<filename>[^:]+):'
         r'(?P<line_number>\d+):'
-        r'\s*\[(?P<error_type>[WECR])(?P<error_number>[^,]+),'
-        r'\s*(?P<context>[^\]]+)\]'
+        r'\s*\[(?P<error_type>[WECR])(?P<error_number>[0-9]+)\]'
+        #r'\s*(?P<context>[^\]]+)\]'
         r'\s*(?P<description>.*)$')
 
     command = 'pylint'
@@ -157,6 +171,7 @@ class PylintRunner(LintRunner):
         , "C0111"  # Missing Docstring
         , "W0142"  # Used * or ** magic
         , "C0202"  # classmethod should have cls as first arg
+        , "C0301"  # long lines, handled separately by other tools
         , "C0322"  # Operator not preceded
         , "C0323"  # Operator not followed by a space
         , "E1002"  # Use super on old-style class
@@ -193,7 +208,7 @@ class PylintRunner(LintRunner):
         return ('--output-format', 'parseable'
                 , '--include-ids', 'y'
                 , '--reports', 'n'
-                , '--disable-msg=' + ','.join(self.operative_ignore_codes))
+                , '--disable=' + ','.join(self.operative_ignore_codes))
 
 
 class Pep8Runner(LintRunner):
@@ -239,6 +254,7 @@ class PyflakesRunner(LintRunner):
         r'(?P<filename>[^:]+):'
         r'(?P<line_number>[^:]+)\s*:'
         r'(?P<description>.+)$')
+    ignore_redefinition_warnings = True
 
     def fixup_data(self, line, data):
         data = LintRunner.fixup_data(self, line, data)
@@ -246,9 +262,10 @@ class PyflakesRunner(LintRunner):
         return data
 
     def _handle_output(self, line, fixed_data):
-        if 'redefinition of unused' in fixed_data['description']:
-            return
-        elif 'redefinition of function' in fixed_data['description']:
+        if self.ignore_redefinition_warnings and (
+            'redefinition of unused' in fixed_data['description']
+            or 'redefinition of function' in fixed_data['description']):
+
             return
         else:
             print self.output_format % fixed_data
@@ -279,6 +296,11 @@ def main():
         default="pylint,pyflakes",
         help=("comma separated list of the checker"
               " programs to run. default=pylint,pyflakes"))
+    parser.add_option(
+        "-d", "--debug",
+        action="store_true",
+        default=False,
+        help=("show debug output"))
     options, filenames = parser.parse_args()
     #
 
@@ -294,7 +316,8 @@ def main():
     for RunnerClass in selected_checkers:
         runner = RunnerClass(
             output_format=output_format,
-            ignore_codes=ignore_codes)
+            ignore_codes=ignore_codes,
+            debug=options.debug)
         runner.run(filenames)
 
 if __name__ == '__main__':
