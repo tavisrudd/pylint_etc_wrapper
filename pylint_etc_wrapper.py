@@ -175,6 +175,7 @@ class PylintRunner(LintRunner):
         , "C0322"  # Operator not preceded
         , "C0323"  # Operator not followed by a space
         , "E1002"  # Use super on old-style class
+        , "W0141"  # used built in function map
         , "W0232"  # No __init__
         , "W0621"  # Redefining name 'x' from outer scope
                    # (is sually complaining about dynamic scope, which doesn't matter)
@@ -193,6 +194,7 @@ class PylintRunner(LintRunner):
         , "E1101"  # Instance of 'x' has no 'y' member
         , "E1102" # x is not callable
         , "E1103" # Class 'x' has no 'y' member
+        , "E0611" # module does not contain variable
         ])
 
     def fixup_data(self, line, data):
